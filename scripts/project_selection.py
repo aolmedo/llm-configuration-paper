@@ -9,7 +9,7 @@ load_dotenv()
 
 
 def get_repos(query=None):
-    API_TOKEN = os.getenv("API_TOKEN")
+    API_TOKEN = os.getenv("GITHUB_API_TOKEN")
     auth = Auth.Token(API_TOKEN)
 
     g = Github(auth=auth)
