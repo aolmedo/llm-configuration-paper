@@ -1,2 +1,7 @@
 python-dotenv
 PyGithub
+pandas
+matplotlib
+matplotlib-inline
+seaborn
+jupyter

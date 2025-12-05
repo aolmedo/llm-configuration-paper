@@ -17,23 +17,37 @@ def extract_variable_assignments(tree):
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                # Variable simple
                 if isinstance(target, ast.Name) and target.id in target_variables:
                     if isinstance(node.value, (ast.Constant, ast.Num)):                        
                         if node.value.value and (target.id == 'model' or (target.id != 'model' and isinstance(node.value.value, (int, float)))):
                             results.append((project_name, os.path.abspath(file_path), target.lineno, target.id, node.value.value))
-                # Atributo como config.temperature
                 elif isinstance(target, ast.Attribute) and target.attr in target_variables:
                     if isinstance(node.value, (ast.Constant, ast.Num)):
                         if node.value.value and (target.attr == 'model' or (target.attr != 'model' and isinstance(node.value.value, (int, float)))):
                             results.append((project_name, os.path.abspath(file_path), target.lineno,target.attr, node.value.value))
-                # Diccionario con parámetros
                 elif isinstance(node.value, ast.Dict):
                     for key_node, value_node in zip(node.value.keys, node.value.values):
                         if isinstance(key_node, ast.Constant) and key_node.value in target_variables:
                             if isinstance(value_node, (ast.Constant, ast.Num)):
                                 if value_node.value and (key_node.value == 'model' or (key_node.value != 'model' and isinstance(value_node.value, (int, float)))):
                                     results.append((project_name, os.path.abspath(file_path), target.lineno, key_node.value, value_node.value))
+        elif isinstance(node, ast.AnnAssign):
+            t = node.target
+            param = None
+
+            if isinstance(t, ast.Name) and t.id in target_variables:
+                param = t.id
+            elif isinstance(t, ast.Attribute) and t.attr in target_variables:
+                param = t.attr
+
+            if param is not None:
+                if isinstance(node.value, (ast.Constant, ast.Num)):
+                    val = node.value.value
+                else:
+                    continue
+
+                if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                    results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
     return results
 
 
@@ -59,6 +73,32 @@ def find_parameter_usage_in_function_calls(tree):
     return results
 
 
+def find_parameter_usage_in_function_definitions(tree):
+    results = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+
+            args = node.args.args
+            defaults = node.args.defaults
+
+            if not defaults:
+                continue
+
+            aligned_args = args[-len(defaults):]
+
+            for arg, default in zip(aligned_args, defaults):
+                if arg.arg in target_variables:
+
+                    if isinstance(default, (ast.Constant, ast.Num)):
+                        val = default.value
+                    else:
+                        continue
+
+                    if val and (arg.arg == 'model' or (arg.arg != 'model' and isinstance(val, (int, float)))):
+                        results.append((project_name, os.path.abspath(file_path), node.lineno, arg.arg, val))
+    return results
+
+
 def find_parameter_usage_in_class_defs(tree):
     results = []
     for node in ast.walk(tree):
@@ -74,6 +114,17 @@ def find_parameter_usage_in_class_defs(tree):
                         elif isinstance(target, ast.Attribute) and target.attr in target_variables:
                             if isinstance(subnode.value, (ast.Constant, ast.Num)):
                                 used_params.append((target.attr, subnode.value.value))
+                elif isinstance(subnode, ast.AnnAssign):
+                    t = subnode.target
+                    param = None
+
+                    if isinstance(t, ast.Name) and t.id in target_variables:
+                        param = t.id
+                    elif isinstance(t, ast.Attribute) and t.attr in target_variables:
+                        param = t.attr
+
+                    if param is not None and isinstance(subnode.value, (ast.Constant, ast.Num)):
+                        used_params.append((param, subnode.value.value))
                 elif isinstance(subnode, ast.Dict):
                     for key_node, value_node in zip(subnode.keys, subnode.values):
                         if isinstance(key_node, ast.Constant) and key_node.value in target_variables:
@@ -121,6 +172,7 @@ for root, _, files in os.walk(source_directory):
                     tree = ast.parse(source, filename=file_path)
                     all_results.extend(extract_variable_assignments(tree))
                     all_results.extend(find_parameter_usage_in_function_calls(tree))
+                    all_results.extend(find_parameter_usage_in_function_definitions(tree))
                     all_results.extend(find_parameter_usage_in_class_defs(tree))
                 except Exception as e:
                     print(f"Error procesando {file_path}: {e}")
