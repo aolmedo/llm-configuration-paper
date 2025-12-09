@@ -137,6 +137,94 @@ def find_parameter_usage_in_class_defs(tree):
     return results
 
 
+def find_additional_parameter_patterns(tree):
+    results = []
+
+    for node in ast.walk(tree):
+
+        # ---------------------------------------------------
+        # (A) dataclasses: field(default=...)
+        # ---------------------------------------------------
+        if isinstance(node, ast.AnnAssign):
+            if isinstance(node.value, ast.Call):
+                if isinstance(node.value.func, ast.Name) and node.value.func.id == "field":
+                    for kw in node.value.keywords:
+                        if kw.arg == "default":
+                            if isinstance(node.target, ast.Name) and node.target.id in target_variables:
+                                if isinstance(kw.value, (ast.Constant, ast.Num)):
+                                    val = kw.value.value
+                                    param = node.target.id
+                                    if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                                        results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
+                            elif isinstance(node.target, ast.Attribute) and node.target.attr in target_variables:
+                                if isinstance(kw.value, (ast.Constant, ast.Num)):
+                                    val = kw.value.value
+                                    param = node.target.attr
+                                    if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                                        results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
+
+        # ---------------------------------------------------
+        # (B) dict(model="gpt-4", top_p=0.8)
+        # ---------------------------------------------------
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id == "dict":
+                for kw in node.keywords:
+                    if kw.arg in target_variables:
+                        if isinstance(kw.value, (ast.Constant, ast.Num)):
+                            val = kw.value.value
+                            param = kw.arg
+                            if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                                results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
+
+        # ---------------------------------------------------
+        # (C) List of pairs: [("model", "gpt-4")]
+        # ---------------------------------------------------
+        if isinstance(node, (ast.List, ast.Tuple)):
+            for elt in node.elts:
+                if isinstance(elt, ast.Tuple) and len(elt.elts) == 2:
+                    key_node, value_node = elt.elts
+                    if isinstance(key_node, ast.Constant) and key_node.value in target_variables:
+                        if isinstance(value_node, (ast.Constant, ast.Num)):
+                            val = value_node.value
+                            param = key_node.value
+                            if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                                results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
+
+        # ---------------------------------------------------
+        # (D) Destructuring: model, top_p = ("gpt-4", 0.8)
+        # ---------------------------------------------------
+        if isinstance(node, ast.Assign):
+            if isinstance(node.targets[0], ast.Tuple) and isinstance(node.value, ast.Tuple):
+                targets = node.targets[0].elts
+                values = node.value.elts
+                for t, v in zip(targets, values):
+                    if isinstance(t, ast.Name) and t.id in target_variables:
+                        if isinstance(v, (ast.Constant, ast.Num)):
+                            val = v.value
+                            param = t.id
+                            if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                                results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
+
+        # ---------------------------------------------------
+        # (E) config.get("model")
+        # ---------------------------------------------------
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "get":
+                # node.func.value = objeto del cual se hace get()
+                # node.args = argumentos del get()
+                if node.args and isinstance(node.args[0], ast.Constant):
+                    key = node.args[0].value
+                    if key in target_variables:
+                        # obtener default si existe, p.ej config.get("model", "gpt-4")
+                        if len(node.args) > 1 and isinstance(node.args[1], (ast.Constant, ast.Num)):
+                            val = node.args[1].value
+                            param = key
+                            if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                                results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
+
+    return results
+
+
 def clone_repos(dataset_path, base_path):
     cloned_repos = 0
     with open(dataset_path, 'r') as a_file:
@@ -174,6 +262,7 @@ for root, _, files in os.walk(source_directory):
                     all_results.extend(find_parameter_usage_in_function_calls(tree))
                     all_results.extend(find_parameter_usage_in_function_definitions(tree))
                     all_results.extend(find_parameter_usage_in_class_defs(tree))
+                    all_results.extend(find_additional_parameter_patterns(tree))
                 except Exception as e:
                     print(f"Error procesando {file_path}: {e}")
 
