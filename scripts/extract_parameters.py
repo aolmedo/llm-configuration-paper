@@ -18,18 +18,18 @@ def extract_variable_assignments(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id in target_variables:
-                    if isinstance(node.value, (ast.Constant, ast.Num)):                        
-                        if node.value.value and (target.id == 'model' or (target.id != 'model' and isinstance(node.value.value, (int, float)))):
+                    if isinstance(node.value, (ast.Constant, ast.Num)):
+                        if (target.id == 'model' and node.value.value) or (target.id != 'model' and node.value.value is not None and isinstance(node.value.value, (int, float))):
                             results.append((project_name, os.path.abspath(file_path), target.lineno, target.id, node.value.value))
                 elif isinstance(target, ast.Attribute) and target.attr in target_variables:
                     if isinstance(node.value, (ast.Constant, ast.Num)):
-                        if node.value.value and (target.attr == 'model' or (target.attr != 'model' and isinstance(node.value.value, (int, float)))):
+                        if (target.attr == 'model' and node.value.value) or (target.attr != 'model' and node.value.value is not None and isinstance(node.value.value, (int, float))):
                             results.append((project_name, os.path.abspath(file_path), target.lineno,target.attr, node.value.value))
                 elif isinstance(node.value, ast.Dict):
                     for key_node, value_node in zip(node.value.keys, node.value.values):
                         if isinstance(key_node, ast.Constant) and key_node.value in target_variables:
                             if isinstance(value_node, (ast.Constant, ast.Num)):
-                                if value_node.value and (key_node.value == 'model' or (key_node.value != 'model' and isinstance(value_node.value, (int, float)))):
+                                if (key_node.value == 'model' and value_node.value) or (key_node.value != 'model' and value_node.value is not None and isinstance(value_node.value, (int, float))):
                                     results.append((project_name, os.path.abspath(file_path), target.lineno, key_node.value, value_node.value))
         elif isinstance(node, ast.AnnAssign):
             t = node.target
@@ -46,7 +46,7 @@ def extract_variable_assignments(tree):
                 else:
                     continue
 
-                if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                if (param == 'model' and val) or (param != 'model' and val is not None and isinstance(val, (int, float))):
                     results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
     return results
 
@@ -68,7 +68,7 @@ def find_parameter_usage_in_function_calls(tree):
                         used_params.append((kw.arg, kw.value.value))
             if used_params and not 'Field' in func_name:
                 for param in used_params:
-                    if param[1] and (param[0] == 'model' or (param[0] != 'model' and isinstance(param[1], (int, float)))):
+                    if (param[0] == 'model' and param[1]) or (param[0] != 'model' and param[1] is not None and isinstance(param[1], (int, float))):
                         results.append((project_name, os.path.abspath(file_path), node.lineno, param[0], param[1]))
     return results
 
@@ -94,7 +94,7 @@ def find_parameter_usage_in_function_definitions(tree):
                     else:
                         continue
 
-                    if val and (arg.arg == 'model' or (arg.arg != 'model' and isinstance(val, (int, float)))):
+                    if (arg.arg == 'model' and val) or (arg.arg != 'model' and val is not None and isinstance(val, (int, float))):
                         results.append((project_name, os.path.abspath(file_path), node.lineno, arg.arg, val))
     return results
 
@@ -132,7 +132,7 @@ def find_parameter_usage_in_class_defs(tree):
                                 used_params.append((key_node.value, value_node.value))
             if used_params and not 'Field' in class_name:
                 for param in used_params:
-                    if param[1] and (param[0] == 'model' or (param[0] != 'model' and isinstance(param[1], (int, float)))):
+                    if (param[0] == 'model' and param[1]) or (param[0] != 'model' and param[1] is not None and isinstance(param[1], (int, float))):
                         results.append((project_name, os.path.abspath(file_path), node.lineno, param[0], param[1]))
     return results
 
@@ -154,13 +154,13 @@ def find_additional_parameter_patterns(tree):
                                 if isinstance(kw.value, (ast.Constant, ast.Num)):
                                     val = kw.value.value
                                     param = node.target.id
-                                    if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                                    if (param == 'model' and val) or (param != 'model' and val is not None and isinstance(val, (int, float))):
                                         results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
                             elif isinstance(node.target, ast.Attribute) and node.target.attr in target_variables:
                                 if isinstance(kw.value, (ast.Constant, ast.Num)):
                                     val = kw.value.value
                                     param = node.target.attr
-                                    if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                                    if (param == 'model' and val) or (param != 'model' and val is not None and isinstance(val, (int, float))):
                                         results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
 
         # ---------------------------------------------------
@@ -173,7 +173,7 @@ def find_additional_parameter_patterns(tree):
                         if isinstance(kw.value, (ast.Constant, ast.Num)):
                             val = kw.value.value
                             param = kw.arg
-                            if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                            if (param == 'model' and val) or (param != 'model' and val is not None and isinstance(val, (int, float))):
                                 results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
 
         # ---------------------------------------------------
@@ -187,7 +187,7 @@ def find_additional_parameter_patterns(tree):
                         if isinstance(value_node, (ast.Constant, ast.Num)):
                             val = value_node.value
                             param = key_node.value
-                            if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                            if (param == 'model' and val) or (param != 'model' and val is not None and isinstance(val, (int, float))):
                                 results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
 
         # ---------------------------------------------------
@@ -202,7 +202,7 @@ def find_additional_parameter_patterns(tree):
                         if isinstance(v, (ast.Constant, ast.Num)):
                             val = v.value
                             param = t.id
-                            if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                            if (param == 'model' and val) or (param != 'model' and val is not None and isinstance(val, (int, float))):
                                 results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
 
         # ---------------------------------------------------
@@ -219,7 +219,7 @@ def find_additional_parameter_patterns(tree):
                         if len(node.args) > 1 and isinstance(node.args[1], (ast.Constant, ast.Num)):
                             val = node.args[1].value
                             param = key
-                            if val and (param == 'model' or (param != 'model' and isinstance(val, (int, float)))):
+                            if (param == 'model' and val) or (param != 'model' and val is not None and isinstance(val, (int, float))):
                                 results.append((project_name, os.path.abspath(file_path), node.lineno, param, val))
 
     return results
